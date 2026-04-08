@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Wall Calendar Overview</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/date-fns/4.1.0/cdn.min.js"></script>
+    
+    <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        body { font-family: system-ui, -apple-system, sans-serif; }
+        textarea::-webkit-scrollbar { width: 4px; }
+        textarea::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }
+        .calendar-container { position: relative; overflow: hidden; }
+        .slide-in-right { transform: translateX(100%); animation: slideInRight 0.6s ease-in-out forwards; }
+        .slide-out-left { animation: slideOutLeft 0.6s ease-in-out forwards; }
+        .slide-in-left { transform: translateX(-100%); animation: slideInLeft 0.6s ease-in-out forwards; }
+        .slide-out-right { animation: slideOutRight 0.6s ease-in-out forwards; }
+        @keyframes slideInRight { to { transform: translateX(0); } }
+        @keyframes slideOutLeft { to { transform: translateX(-100%); } }
+        @keyframes slideInLeft { to { transform: translateX(0); } }
+        @keyframes slideOutRight { to { transform: translateX(100%); } }
+    </style>
+</head>
+<body class="bg-gray-100 min-h-screen">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, addMonths, subMonths, isSameMonth, isSameDay, isBefore } = dateFns;
+
+        const ChevronLeft = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+        );
+        const ChevronRight = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+        );
+        const StickyNote = () => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M16 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V8Z"/><path d="M15 3v4a2 2 0 0 0 2 2h4"/></svg>
+        );
+
+        function WallCalendar() {
+            const [currentMonth, setCurrentMonth] = useState(new Date());
+            const [startDate, setStartDate] = useState(null);
+            const [endDate, setEndDate] = useState(null);
+            const [hoverDate, setHoverDate] = useState(null);
+            
+            const [generalNote, setGeneralNote] = useState("");
+            const [rangeNote, setRangeNote] = useState("");
+
+            const [animating, setAnimating] = useState(false);
+            const [direction, setDirection] = useState(null);
+            const [oldMonth, setOldMonth] = useState(null);
+
+            useEffect(() => {
+                const monthKey = format(currentMonth, "yyyy-MM");
+                const saved = localStorage.getItem(`notes-${monthKey}`);
+                if (saved) {
+                    const parsed = JSON.parse(saved);
+                    setGeneralNote(parsed.general || "");
+                    setRangeNote(parsed.range || "");
+                } else {
+                    setGeneralNote("");
+                    setRangeNote("");
+                }
+            }, [currentMonth]);
+
+            useEffect(() => {
+                const monthKey = format(currentMonth, "yyyy-MM");
+                const timeout = setTimeout(() => {
+                    localStorage.setItem(`notes-${monthKey}`, JSON.stringify({ general: generalNote, range: rangeNote }));
+                }, 500);
+                return () => clearTimeout(timeout);
+            }, [generalNote, rangeNote, currentMonth]);
+
+            const handleDayClick = (day) => {
+                if (!isSameMonth(day, currentMonth)) return;
+                if (!startDate || (startDate && endDate)) {
+                    setStartDate(day);
+                    setEndDate(null);
+                    setRangeNote("");
+                } else if (startDate && !endDate) {
+                    if (isBefore(day, startDate)) {
+                        setStartDate(day);
+                    } else {
+                        setEndDate(day);
+                    }
+                }
+            };
+
+            const isInRange = (day) => {
+                if (!startDate) return false;
+                if (endDate) {
+                    return isBefore(startDate, day) && isBefore(day, endDate);
+                }
+                if (hoverDate && isBefore(startDate, hoverDate) && isBefore(day, hoverDate)) return true;
+                if (hoverDate && isBefore(hoverDate, startDate) && isBefore(hoverDate, day)) return true;
+                return false;
+            };
+
+            const generateRows = (month) => {
+                const monthStart = startOfMonth(month);
+                const monthEnd = endOfMonth(monthStart);
+                const calStartDate = startOfWeek(monthStart);
+                const calEndDate = endOfWeek(monthEnd);
+
+                const rows = [];
+                let days = [];
+                let day = calStartDate;
+
+                while (day <= calEndDate) {
+                    for (let i = 0; i < 7; i++) {
+                        const cloneDay = day;
+                        let dayClasses = "p-2 md:p-3 text-center cursor-pointer rounded-lg relative transition-all duration-150 text-sm ";
+                        
+                        if (!isSameMonth(day, monthStart)) {
+                            dayClasses += "text-gray-300 cursor-default";
+                        } else if (isSameDay(day, startDate) || isSameDay(day, endDate)) {
+                            dayClasses += "bg-blue-600 text-white font-bold shadow-lg scale-105";
+                        } else if (isInRange(day)) {
+                            dayClasses += "bg-blue-100 text-blue-800 font-medium";
+                        } else {
+                            dayClasses += "hover:bg-gray-100 text-gray-800";
+                        }
+
+                        days.push(
+                            <div
+                                key={day}
+                                className={dayClasses}
+                                onClick={() => handleDayClick(cloneDay)}
+                                onMouseEnter={() => isSameMonth(day, monthStart) && setHoverDate(cloneDay)}
+                                onMouseLeave={() => setHoverDate(null)}
+                            >
+                                {format(day, "d")}
+                            </div>
+                        );
+                        day = addDays(day, 1);
+                    }
+                    rows.push(<div className="grid grid-cols-7 gap-1">{days}</div>);
+                    days = [];
+                }
+
+                return rows;
+            };
+
+            const rangeDisplayText = startDate && endDate
+                ? `${format(startDate, "MMM d")} - ${format(endDate, "MMM d, yyyy")}`
+                : startDate
+                ? `Selected: ${format(startDate, "MMM d")} ...`
+                : "Click dates to select a range";
+
+            return (
+                <div className="min-h-screen bg-gray-50 p-4 md:p-10">
+                    <div className="max-w-6xl mx-auto bg-white rounded-2xl shadow-2xl overflow-hidden border border-gray-100 flex flex-col md:flex-row min-h-[600px]">
+                        <div className="md:w-2/5 h-64 md:h-auto relative bg-gray-200 overflow-hidden flex-shrink-0">
+                            <img
+                                src="https://images.unsplash.com/photo-1506744038136-46273834b3fb?q=80&w=1000&auto=format&fit=crop" 
+                                alt="Month aesthetic"
+                                className="w-full h-full object-cover"
+                            />
+                            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/20 to-transparent" />
+                            <div className="absolute bottom-8 left-8 text-white">
+                                <h1 className="text-6xl font-bold tracking-tighter leading-none">
+                                    {format(currentMonth, "MMM")}
+                                </h1>
+                                <p className="text-3xl font-light opacity-90 mt-1">
+                                    {format(currentMonth, "yyyy")}
+                                </p>
+                            </div>
+                            <div className="absolute top-6 left-1/2 -translate-x-1/2 w-8 h-8 rounded-full bg-gray-900 border-4 border-gray-700 shadow-inner hidden md:block" />
+                        </div>
+
+                        <div className="md:w-3/5 p-6 md:p-10 flex flex-col">
+                            
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="text-xl font-semibold text-gray-800 tracking-wide">
+                                    {format(currentMonth, "MMMM yyyy")}
+                                </h2>
+                                <div className="flex space-x-2">
+                                    <button onClick={() => { const newMonth = subMonths(currentMonth, 1); setOldMonth(currentMonth); setCurrentMonth(newMonth); setDirection('prev'); setAnimating(true); setTimeout(() => { setAnimating(false); setDirection(null); setOldMonth(null); }, 600); }} className="p-2 rounded-lg hover:bg-gray-100 transition text-gray-600"><ChevronLeft /></button>
+                                    <button onClick={() => { const newMonth = addMonths(currentMonth, 1); setOldMonth(currentMonth); setCurrentMonth(newMonth); setDirection('next'); setAnimating(true); setTimeout(() => { setAnimating(false); setDirection(null); setOldMonth(null); }, 600); }} className="p-2 rounded-lg hover:bg-gray-100 transition text-gray-600"><ChevronRight /></button>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-7 gap-1 mb-2">
+                                {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((d) => (
+                                    <div key={d} className="text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">{d}</div>
+                                ))}
+                            </div>
+
+                            <div className="calendar-container flex-1">
+                                {animating ? (
+                                    <>
+                                        <div className={direction === 'next' ? 'slide-out-left' : 'slide-out-right'}>
+                                            {generateRows(oldMonth)}
+                                        </div>
+                                        <div className={direction === 'next' ? 'slide-in-right' : 'slide-in-left'}>
+                                            {generateRows(currentMonth)}
+                                        </div>
+                                    </>
+                                ) : (
+                                    generateRows(currentMonth)
+                                )}
+                            </div>
+
+                            <div className="mt-6 px-4 py-3 bg-gray-50 rounded-xl text-sm text-gray-600 border border-gray-100 font-medium">
+                                {rangeDisplayText}
+                            </div>
+
+                            <div className="mt-8 border-t border-gray-100 pt-6 space-y-5">
+                                <div className="flex items-center gap-2 text-gray-700 font-medium">
+                                    <StickyNote /> <span>Month Notes</span>
+                                </div>
+                                <textarea
+                                    className="w-full p-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none text-sm text-gray-700 bg-gray-50/50"
+                                    rows={2}
+                                    placeholder="General memo for this month..."
+                                    value={generalNote}
+                                    onChange={(e) => setGeneralNote(e.target.value)}
+                                />
+
+                                {(startDate || endDate) && (
+                                    <div className="space-y-3 transition-all">
+                                        <div className="flex items-center gap-2 text-blue-700 font-medium text-sm">
+                                            <StickyNote /> <span>Range-Specific Notes</span>
+                                        </div>
+                                        <textarea
+                                            className="w-full p-4 border border-blue-200 bg-blue-50/50 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none resize-none text-sm text-blue-900"
+                                            rows={2}
+                                            placeholder="Notes for selected dates..."
+                                            value={rangeNote}
+                                            onChange={(e) => setRangeNote(e.target.value)}
+                                        />
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <div className="text-center mt-8 text-sm text-gray-400">
+                        Built by Yash Bhardwaj
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<WallCalendar />);
+    </script>
+</body>
+</html>
