@@ -98,8 +98,3 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Tailwind CSS** for the amazing utility classes
 - **date-fns** for robust date handling
 - **React** for the component architecture
-
----
-
-**Built with ❤️ by [Yash Bhardwaj](https://github.com/YashBhardwaj123)**</content>
-<parameter name="filePath">c:\Users\HP\vtk\README.md
